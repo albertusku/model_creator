@@ -1,0 +1,29 @@
+[project]
+name = "model-creator"
+version = "0.1.0"
+description = "Local web app for bounding-box annotation and object-detection dataset export."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.111",
+  "uvicorn[standard]>=0.30",
+  "python-multipart>=0.0.9",
+  "pydantic>=1.10",
+  "opencv-python>=4.9",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2",
+  "httpx>=0.27",
+]
+inference = [
+  "ultralytics>=8.2",
+  "lap>=0.5.12",
+]
+
+[tool.setuptools.packages.find]
+include = ["model_creator*"]
+exclude = ["crossfit_dataset*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

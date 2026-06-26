@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Model Creator</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <button id="toggleOptions" class="iconButton" type="button" aria-controls="optionsDrawer" aria-expanded="false" title="Options">&#9776;</button>
+      <h1>Model Creator</h1>
+      <span id="status">No project open</span>
+    </header>
+
+    <main class="layout">
+      <div id="drawerBackdrop" class="drawerBackdrop" hidden></div>
+      <aside id="optionsDrawer" class="sidebar" aria-label="Options">
+        <section>
+          <h2>Create Project</h2>
+          <label>Name <input id="projectName" placeholder="Traffic dataset" /></label>
+          <label>Classes <input id="classes" placeholder="car,person,bike" /></label>
+          <button id="createProject">Create</button>
+        </section>
+
+        <section>
+          <h2>Open Project</h2>
+          <label>Projects folder <input id="projectsBasePath" placeholder="projects" /></label>
+          <button id="refreshProjects">Refresh projects</button>
+          <label>Existing projects <select id="projectSelect"></select></label>
+          <button id="browseProject">Browse project folder</button>
+          <input id="projectFolderInput" type="file" webkitdirectory directory multiple hidden />
+          <button id="openProject">Open</button>
+          <p class="hint">Projects are opened from the selected projects folder. Browse opens a browser folder and is read-only for backend actions.</p>
+        </section>
+
+        <section>
+          <h2>Video to Images</h2>
+          <label>Every N frames <input id="everyFrames" type="number" min="1" value="30" /></label>
+          <input id="videoFile" type="file" accept="video/*" />
+          <button id="importVideo">Extract frames from video</button>
+          <p id="importStatus" class="hint">Choose a video, then extract frames into the current project.</p>
+        </section>
+
+        <section>
+          <h2>Assisted Annotation</h2>
+          <label>Project models <select id="projectModelSelect"></select></label>
+          <label>Confidence <input id="modelConfidence" type="number" min="0" max="1" step="0.05" value="0.25" /></label>
+          <label class="inlineControl"><input id="autoSuggest" type="checkbox" /> Auto suggest on image change</label>
+          <button id="saveModelConfig">Use selected model</button>
+          <button id="suggestBoxes">Suggest boxes</button>
+          <button id="autoReviewPending">Auto review pending images</button>
+          <p id="suggestStatus" class="hint">The selected project model is used for suggestions, auto-review, and tracking candidates.</p>
+          <div id="autoReviewStatus" class="hint"></div>
+        </section>
+
+        <section class="trackingSection">
+          <h2>Tracking</h2>
+          <label>Video <select id="trackingVideo"></select></label>
+          <input id="trackingVideoFile" type="file" accept="video/*" />
+          <button id="addTrackingVideo">Add tracking video</button>
+          <label>Class <select id="trackingClass"></select></label>
+          <label>Confidence <input id="trackingConfidence" type="number" min="0" max="1" step="0.05" value="0.25" /></label>
+          <button id="generateTrackingCandidates">Generate candidate frames</button>
+          <button id="trackSelectedInstance" disabled>Track selected instance</button>
+          <button id="showTrajectory" disabled>Show trajectory</button>
+          <button id="generateOriginalPose">Generate pose on original video</button>
+          <button id="generateTrackingPose" disabled>Generate pose on tracking video</button>
+          <p id="trackingStatus" class="hint">Choose a video and class, then select a detected instance.</p>
+          <p id="poseStatus" class="hint"></p>
+        </section>
+
+        <section>
+          <h2>Export</h2>
+          <label>Format
+            <select id="exportFormat">
+              <option value="yolo">YOLO</option>
+              <option value="coco">COCO</option>
+            </select>
+          </label>
+          <div class="split">
+            <label>Train ratio <input id="splitTrain" type="number" step="0.05" value="0.8" /></label>
+            <label>Validation ratio <input id="splitVal" type="number" step="0.05" value="0.1" /></label>
+            <label>Test ratio <input id="splitTest" type="number" step="0.05" value="0.1" /></label>
+          </div>
+          <p class="hint">Values are proportional, for example 0.8 / 0.1 / 0.1, and are normalized if they do not sum exactly to 1. Only reviewed images are exported.</p>
+          <button id="exportDataset">Export snapshot</button>
+        </section>
+
+        <section>
+          <h2>Train Model</h2>
+          <label>Base model <input id="trainModel" value="yolo11n.pt" /></label>
+          <label>Epochs <input id="trainEpochs" type="number" min="1" value="50" /></label>
+          <label>Image size <input id="trainImageSize" type="number" min="32" step="32" value="640" /></label>
+          <label>Batch <input id="trainBatch" value="auto" /></label>
+          <label>Device <input id="trainDevice" value="auto" /></label>
+          <button id="startTraining">Start training</button>
+          <div id="trainingStatus" class="hint">Training creates a YOLO snapshot from reviewed images and runs in the background.</div>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <div class="toolbar">
+          <button id="prevImage" title="Previous image">Prev</button>
+          <button id="nextImage" title="Next image">Next</button>
+          <label>Class <select id="activeClass"></select></label>
+          <button id="reviewImage">Mark reviewed</button>
+          <button id="deleteBox">Delete box</button>
+          <button id="undo">Undo</button>
+          <span id="imageInfo">No image</span>
+        </div>
+        <div class="canvasWrap">
+          <canvas id="canvas"></canvas>
+          <div id="trackingCandidateViewer" class="trackingCandidateViewer" hidden>
+            <canvas id="trackingCandidateCanvas"></canvas>
+            <div id="trackingCandidateInfo" class="trackingCandidateInfo"></div>
+          </div>
+          <video id="trajectoryVideo" controls loop hidden></video>
+        </div>
+      </section>
+
+      <aside class="images">
+        <h2>Review Queue</h2>
+        <div class="rightTabs" role="tablist" aria-label="Right panel selector">
+          <button id="showImageQueue" class="active" type="button">Images to review</button>
+          <button id="showTrackingQueue" type="button">Tracking candidates</button>
+        </div>
+        <label class="inlineControl imageFilter"><input id="showReviewed" type="checkbox" /> Show reviewed</label>
+        <div id="imageList"></div>
+        <div id="trackingCandidates" class="candidateGrid" hidden></div>
+      </aside>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
