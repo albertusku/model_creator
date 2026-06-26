@@ -8,8 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .schemas import SplitConfig
-from .storage import load_project, project_root
+from ..core.schemas import SplitConfig
+from ..core.storage import load_project, project_root
 
 
 def validate_project(data: dict[str, Any]) -> list[str]:

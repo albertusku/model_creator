@@ -5,10 +5,10 @@ import time
 import pytest
 from fastapi import HTTPException
 
-from model_creator.auto_review import get_auto_review_job, start_auto_review_job
-from model_creator.main import api_start_auto_review
-from model_creator.schemas import AutoReviewStartRequest, Box, SplitConfig
-from model_creator.storage import add_images, configure_model, create_project, load_project, save_annotations
+from model_creator.models.object_detection.auto_review import get_auto_review_job, start_auto_review_job
+from model_creator.app.main import api_start_auto_review
+from model_creator.core.schemas import AutoReviewStartRequest, Box, SplitConfig
+from model_creator.core.storage import add_images, configure_model, create_project, load_project, save_annotations
 
 
 def make_project(tmp_path, image_count: int = 4):

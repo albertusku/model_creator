@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from model_creator.pose import get_pose_video_path, start_pose_job
-from model_creator.schemas import SplitConfig
-from model_creator.storage import add_video, create_project
+from model_creator.models.pose.pose import get_pose_video_path, start_pose_job
+from model_creator.core.schemas import SplitConfig
+from model_creator.core.storage import add_video, create_project
 
 
 def make_project(tmp_path):
@@ -60,7 +60,7 @@ def test_pose_job_rejects_tracking_source_without_tracking_job(tmp_path):
 def test_pose_job_uses_tracking_video_when_available(tmp_path, monkeypatch):
     root, video_id = make_project(tmp_path)
     tracking_video = root / "videos" / "clip.mp4"
-    monkeypatch.setattr("model_creator.pose.get_tracking_video_path", lambda job_id: tracking_video)
+    monkeypatch.setattr("model_creator.models.pose.pose.get_tracking_video_path", lambda job_id: tracking_video)
 
     job = start_pose_job(
         str(root),

@@ -5,14 +5,14 @@ from io import BytesIO
 import pytest
 from fastapi import UploadFile
 
-from model_creator.file_dialog import choose_directory
-from model_creator.main import api_add_tracking_video, api_choose_project_directory, api_discover_projects, api_model_files
-from model_creator.schemas import SplitConfig
-from model_creator.storage import create_project, load_project
+from model_creator.core.file_dialog import choose_directory
+from model_creator.app.main import api_add_tracking_video, api_choose_project_directory, api_discover_projects, api_model_files
+from model_creator.core.schemas import SplitConfig
+from model_creator.core.storage import create_project, load_project
 
 
 def test_project_directory_dialog_endpoint(monkeypatch):
-    monkeypatch.setattr("model_creator.main.choose_directory", lambda: "/tmp/project")
+    monkeypatch.setattr("model_creator.app.main.choose_directory", lambda: "/tmp/project")
 
     response = api_choose_project_directory()
 
@@ -25,8 +25,8 @@ def test_choose_directory_uses_zenity(monkeypatch):
         stdout = "/tmp/project\n"
         stderr = ""
 
-    monkeypatch.setattr("model_creator.file_dialog.shutil.which", lambda name: "/usr/bin/zenity")
-    monkeypatch.setattr("model_creator.file_dialog.subprocess.run", lambda *args, **kwargs: Completed())
+    monkeypatch.setattr("model_creator.core.file_dialog.shutil.which", lambda name: "/usr/bin/zenity")
+    monkeypatch.setattr("model_creator.core.file_dialog.subprocess.run", lambda *args, **kwargs: Completed())
 
     assert choose_directory() == "/tmp/project"
 

@@ -74,15 +74,25 @@ External tracking videos are copied into the project `videos/` folder, but their
 
 ```text
 model_creator/
-  main.py          FastAPI app and HTTP endpoints
-  storage.py       Project JSON, folders, images, videos, annotations
-  video.py         Video frame extraction
-  inference.py     YOLO prediction mapping
-  auto_review.py   Background auto-review jobs
-  tracking.py      Candidate frames, instance tracking, trajectory video
-  exporters.py     YOLO and COCO export
-  training.py      YOLO training jobs
-  schemas.py       Pydantic request/data models
+  main.py          Compatibility entrypoint for uvicorn
+  app/
+    main.py        FastAPI app and HTTP endpoints
+  core/
+    schemas.py     Pydantic request/data models
+    storage.py     Project JSON, folders, images, videos, annotations
+    file_dialog.py Local folder picker integration
+  datasets/
+    exporters.py   Dataset validation plus YOLO and COCO export
+  media/
+    video.py       Video frame extraction
+  models/
+    object_detection/
+      inference.py   YOLO prediction mapping
+      auto_review.py Background auto-review jobs
+      tracking.py    Candidate frames, instance tracking, trajectory video
+      training.py    YOLO training jobs
+    pose/
+      pose.py        Human pose video rendering
   static/
     index.html     Plain HTML UI
     styles.css     Dashboard styling

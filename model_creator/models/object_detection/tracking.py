@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .inference import map_model_class
-from .storage import load_project, project_root, resolve_project_video_path
+from ...core.storage import load_project, project_root, resolve_project_video_path
 
 try:
     import cv2

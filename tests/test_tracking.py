@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from model_creator.schemas import SplitConfig
-from model_creator.storage import configure_model, create_project, load_project, save_project
-from model_creator.tracking import (
+from model_creator.core.schemas import SplitConfig
+from model_creator.core.storage import configure_model, create_project, load_project, save_project
+from model_creator.models.object_detection.tracking import (
     _best_iou_track,
     _boxes_from_result,
     generate_candidate_frames,
@@ -169,7 +169,7 @@ def test_start_tracking_job_reports_failure_when_no_track_matches(tmp_path):
 
 def test_start_tracking_rejects_missing_lap_before_creating_job(tmp_path, monkeypatch):
     root = make_project(tmp_path)
-    monkeypatch.setattr("model_creator.tracking.importlib.util.find_spec", lambda name: None if name == "lap" else object())
+    monkeypatch.setattr("model_creator.models.object_detection.tracking.importlib.util.find_spec", lambda name: None if name == "lap" else object())
 
     with pytest.raises(RuntimeError, match="ByteTrack requires"):
         start_tracking_job(

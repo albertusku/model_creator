@@ -11,7 +11,7 @@ from typing import Any
 from .schemas import Box, ClassDef, SplitConfig
 
 PROJECT_FILE = "project.json"
-DEFAULT_PROJECTS_DIR = Path(__file__).resolve().parent.parent / "projects"
+DEFAULT_PROJECTS_DIR = Path(__file__).resolve().parent.parent.parent / "projects"
 
 
 def now_iso() -> str:

@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from .inference import predict_boxes
-from .schemas import Box
-from .storage import load_project, save_annotations
+from ...core.schemas import Box
+from ...core.storage import load_project, save_annotations
 
 Predictor = Callable[[str, str, float | None], list[dict[str, Any]]]
 

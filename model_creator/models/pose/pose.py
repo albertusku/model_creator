@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .storage import load_project, resolve_project_video_path
-from .tracking import get_tracking_video_path
+from ...core.storage import load_project, resolve_project_video_path
+from ..object_detection.tracking import get_tracking_video_path
 
 try:
     import cv2

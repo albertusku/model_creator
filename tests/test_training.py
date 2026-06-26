@@ -3,10 +3,10 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from model_creator.main import api_start_training, api_training_asset
-from model_creator.schemas import Box, SplitConfig, TrainingStartRequest
-from model_creator.storage import add_images, create_project, load_project, save_annotations
-from model_creator.training import get_job, start_training_job
+from model_creator.app.main import api_start_training, api_training_asset
+from model_creator.core.schemas import Box, SplitConfig, TrainingStartRequest
+from model_creator.core.storage import add_images, create_project, load_project, save_annotations
+from model_creator.models.object_detection.training import get_job, start_training_job
 
 
 def make_reviewed_project(tmp_path):

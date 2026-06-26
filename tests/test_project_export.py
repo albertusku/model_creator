@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from model_creator.exporters import export_dataset, validate_project
-from model_creator.inference import map_model_class
-from model_creator.schemas import Box, SplitConfig
-from model_creator.storage import add_images, configure_model, create_project, load_project, save_annotations
+from model_creator.datasets.exporters import export_dataset, validate_project
+from model_creator.models.object_detection.inference import map_model_class
+from model_creator.core.schemas import Box, SplitConfig
+from model_creator.core.storage import add_images, configure_model, create_project, load_project, save_annotations
 
 
 def make_project(tmp_path):

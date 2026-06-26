@@ -11,9 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .exporters import export_dataset
-from .schemas import SplitConfig, TrainingStartRequest
-from .storage import load_project, project_root, save_project
+from ...datasets.exporters import export_dataset
+from ...core.schemas import SplitConfig, TrainingStartRequest
+from ...core.storage import load_project, project_root, save_project
 
 TRAINING_ASSETS = {
     "results.png",

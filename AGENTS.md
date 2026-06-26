@@ -4,15 +4,18 @@
 
 This repository contains a local Python web app for bounding-box annotation, YOLO assistance, tracking, training, and dataset export.
 
-- `model_creator/main.py` defines the FastAPI app and API endpoints.
-- `model_creator/storage.py` manages project JSON files and local project folders.
-- `model_creator/video.py` extracts frames from imported videos.
-- `model_creator/inference.py` maps YOLO model predictions into project classes.
-- `model_creator/auto_review.py` runs background auto-review jobs for pending images.
-- `model_creator/tracking.py` generates tracking candidates, starts ByteTrack jobs, and renders trajectory videos.
-- `model_creator/training.py` creates YOLO snapshots and runs training jobs.
-- `model_creator/exporters.py` validates annotations and exports YOLO/COCO snapshots.
-- `model_creator/schemas.py` contains Pydantic request and data models.
+- `model_creator/main.py` is a compatibility entrypoint for `uvicorn model_creator.main:app`.
+- `model_creator/app/main.py` defines the FastAPI app and API endpoints.
+- `model_creator/core/storage.py` manages project JSON files and local project folders.
+- `model_creator/core/schemas.py` contains Pydantic request and data models.
+- `model_creator/core/file_dialog.py` contains local folder picker integration.
+- `model_creator/media/video.py` extracts frames from imported videos.
+- `model_creator/datasets/exporters.py` validates annotations and exports YOLO/COCO snapshots.
+- `model_creator/models/object_detection/inference.py` maps YOLO model predictions into project classes.
+- `model_creator/models/object_detection/auto_review.py` runs background auto-review jobs for pending images.
+- `model_creator/models/object_detection/tracking.py` generates tracking candidates, starts ByteTrack jobs, and renders trajectory videos.
+- `model_creator/models/object_detection/training.py` creates YOLO snapshots and runs training jobs.
+- `model_creator/models/pose/pose.py` renders human pose videos.
 - `model_creator/static/` contains the browser UI: `index.html`, `styles.css`, and `app.js`.
 - `tests/` contains pytest coverage for project creation, annotation persistence, validation, export, auto-review, tracking, and training.
 
@@ -62,7 +65,7 @@ node --check model_creator/static/app.js
 
 ## Coding Style & Naming Conventions
 
-Use Python 3.11+ and 4-space indentation. Prefer `snake_case` for modules, functions, variables, and JSON field names. Keep backend modules focused by responsibility: API routing in `main.py`, persistence in `storage.py`, export logic in `exporters.py`, video processing in `video.py`, tracking in `tracking.py`, and training in `training.py`.
+Use Python 3.11+ and 4-space indentation. Prefer `snake_case` for modules, functions, variables, and JSON field names. Keep backend modules focused by responsibility: API routing in `app/main.py`, shared project concerns in `core/`, dataset import/export concerns in `datasets/` and `media/`, and model-specific workflows under `models/<model_type>/`.
 
 Frontend code is plain HTML/CSS/JavaScript. Use descriptive DOM IDs and keep canvas interaction logic in `static/app.js`.
 

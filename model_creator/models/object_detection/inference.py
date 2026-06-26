@@ -5,7 +5,7 @@ import gc
 from pathlib import Path
 from typing import Any
 
-from .storage import load_project, project_root
+from ...core.storage import load_project, project_root
 
 
 def class_name_map(data: dict[str, Any]) -> dict[str, int]:
