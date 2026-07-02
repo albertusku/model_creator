@@ -32,8 +32,14 @@ class SplitConfig(BaseModel):
 class CreateProjectRequest(BaseModel):
     path: str
     name: str
-    classes: list[str]
+    classes: list[str] = Field(default_factory=list)
+    project_type: Literal["object_detection", "csv_classification"] = "object_detection"
     split: SplitConfig = Field(default_factory=SplitConfig)
+
+
+class SetProjectTypeRequest(BaseModel):
+    path: str
+    project_type: Literal["object_detection", "csv_classification"]
 
 
 class ProjectPathRequest(BaseModel):
@@ -122,3 +128,37 @@ class TrainingStartRequest(BaseModel):
         if value < 1:
             raise ValueError("training numeric values must be positive")
         return value
+
+
+class ClassificationDatasetImportResponse(BaseModel):
+    dataset_id: str
+    columns: list[str]
+    rows: int
+    summary: dict
+
+
+class ClassificationTrainRequest(BaseModel):
+    project_path: str
+    dataset_id: str
+    target_column: str
+    feature_columns: list[str]
+    test_size: float = 0.2
+
+    @validator("test_size")
+    @classmethod
+    def valid_test_size(cls, value: float) -> float:
+        if value <= 0 or value >= 1:
+            raise ValueError("test_size must be between 0 and 1")
+        return value
+
+
+class ClassificationClusterRequest(BaseModel):
+    project_path: str
+    dataset_id: str
+    target_column: str
+    feature_columns: list[str]
+
+
+class ClassificationPredictionRequest(BaseModel):
+    project_path: str
+    run_id: str | None = None

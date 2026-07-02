@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Model Creator</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=csv-classification-probabilities" />
   </head>
   <body>
     <header class="topbar">
@@ -19,7 +19,13 @@
         <section>
           <h2>Create Project</h2>
           <label>Name <input id="projectName" placeholder="Traffic dataset" /></label>
-          <label>Classes <input id="classes" placeholder="car,person,bike" /></label>
+          <label>Type
+            <select id="projectType">
+              <option value="object_detection">Object detection</option>
+              <option value="csv_classification">CSV classification</option>
+            </select>
+          </label>
+          <label id="classesLabel">Classes <input id="classes" placeholder="car,person,bike" /></label>
           <button id="createProject">Create</button>
         </section>
 
@@ -34,7 +40,7 @@
           <p class="hint">Projects are opened from the selected projects folder. Browse opens a browser folder and is read-only for backend actions.</p>
         </section>
 
-        <section>
+        <section class="objectDetectionOnly">
           <h2>Video to Images</h2>
           <label>Every N frames <input id="everyFrames" type="number" min="1" value="30" /></label>
           <input id="videoFile" type="file" accept="video/*" />
@@ -42,7 +48,7 @@
           <p id="importStatus" class="hint">Choose a video, then extract frames into the current project.</p>
         </section>
 
-        <section>
+        <section class="objectDetectionOnly">
           <h2>Assisted Annotation</h2>
           <label>Project models <select id="projectModelSelect"></select></label>
           <label>Confidence <input id="modelConfidence" type="number" min="0" max="1" step="0.05" value="0.25" /></label>
@@ -54,7 +60,7 @@
           <div id="autoReviewStatus" class="hint"></div>
         </section>
 
-        <section class="trackingSection">
+        <section class="trackingSection objectDetectionOnly">
           <h2>Tracking</h2>
           <label>Video <select id="trackingVideo"></select></label>
           <input id="trackingVideoFile" type="file" accept="video/*" />
@@ -70,7 +76,7 @@
           <p id="poseStatus" class="hint"></p>
         </section>
 
-        <section>
+        <section class="objectDetectionOnly">
           <h2>Export</h2>
           <label>Format
             <select id="exportFormat">
@@ -87,7 +93,7 @@
           <button id="exportDataset">Export snapshot</button>
         </section>
 
-        <section>
+        <section class="objectDetectionOnly">
           <h2>Train Model</h2>
           <label>Base model <input id="trainModel" value="yolo11n.pt" /></label>
           <label>Epochs <input id="trainEpochs" type="number" min="1" value="50" /></label>
@@ -97,9 +103,30 @@
           <button id="startTraining">Start training</button>
           <div id="trainingStatus" class="hint">Training creates a YOLO snapshot from reviewed images and runs in the background.</div>
         </section>
+
+        <section class="classificationOnly" hidden>
+          <h2>CSV Dataset</h2>
+          <input id="classificationCsvFile" type="file" accept=".csv,text/csv" />
+          <button id="importClassificationCsv">Import CSV</button>
+          <label>Target column <select id="classificationTarget"></select></label>
+          <div id="classificationFeatures" class="featureList"></div>
+          <label>Test size <input id="classificationTestSize" type="number" min="0.05" max="0.95" step="0.05" value="0.2" /></label>
+          <button id="plotClassificationClusters">Plot clusters</button>
+          <button id="startClassificationTraining">Train classifier</button>
+          <div id="classificationStatus" class="hint">Import a CSV, then choose a target column.</div>
+        </section>
+
+        <section class="classificationOnly" hidden>
+          <h2>Predict CSV</h2>
+          <label>Run <select id="classificationRun"></select></label>
+          <input id="classificationPredictFile" type="file" accept=".csv,text/csv" />
+          <button id="predictClassificationCsv">Predict</button>
+          <a id="classificationDownload" class="downloadLink" hidden>Download predictions</a>
+          <div id="classificationPredictionStatus" class="hint">Train a model, then upload a CSV with the same feature columns.</div>
+        </section>
       </aside>
 
-      <section class="workspace">
+      <section class="workspace objectDetectionOnly" id="annotationWorkspace">
         <div class="toolbar">
           <button id="prevImage" title="Previous image">Prev</button>
           <button id="nextImage" title="Next image">Next</button>
@@ -119,7 +146,31 @@
         </div>
       </section>
 
-      <aside class="images">
+      <section class="workspace classificationOnly" id="classificationWorkspace" hidden>
+        <div class="classificationHeader">
+          <h2>Classification</h2>
+          <span id="classificationInfo" class="hint">No CSV dataset imported.</span>
+        </div>
+        <div class="classificationResults">
+          <section>
+            <h2>Metrics</h2>
+            <div id="classificationMetrics" class="metricsGrid"></div>
+          </section>
+          <section>
+            <h2>Predictions</h2>
+            <div id="classificationPredictions" class="tableWrap"></div>
+          </section>
+          <section>
+            <h2>Clusters</h2>
+            <div class="clusterPlotWrap">
+              <canvas id="classificationClusterCanvas" width="900" height="360"></canvas>
+            </div>
+            <div id="classificationClusterStatus" class="hint">Import a CSV and choose target/features to plot clusters.</div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="images objectDetectionOnly" id="reviewQueue">
         <h2>Review Queue</h2>
         <div class="rightTabs" role="tablist" aria-label="Right panel selector">
           <button id="showImageQueue" class="active" type="button">Images to review</button>
@@ -131,6 +182,6 @@
       </aside>
     </main>
 
-    <script src="/app.js"></script>
+    <script src="/app.js?v=csv-classification-probabilities"></script>
   </body>
 </html>

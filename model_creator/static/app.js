@@ -28,6 +28,11 @@ const state = {
   manualReviewImageIds: new Set(),
   autoSuggestToken: 0,
   projectModels: [],
+  classificationDatasetId: null,
+  classificationColumns: [],
+  classificationTrainJobId: null,
+  classificationTrainPoll: null,
+  classificationClusterPlot: null,
 };
 
 const el = (id) => document.getElementById(id);
@@ -67,6 +72,11 @@ el("showImageQueue").onclick = () => {
 };
 el("showTrackingQueue").onclick = () => setRightPanel("tracking");
 el("projectsBasePath").value = localStorage.getItem("modelCreator.projectsBasePath") || "projects";
+el("projectType").onchange = () => {
+  const isDetection = el("projectType").value === "object_detection";
+  el("classesLabel").hidden = !isDetection;
+};
+el("projectType").dispatchEvent(new Event("change"));
 
 function setStatus(text) {
   el("status").textContent = text;
@@ -139,6 +149,39 @@ function renderProjectModelOptions(models) {
   }
 }
 
+function projectType() {
+  return state.project?.project_type || "object_detection";
+}
+
+async function ensureProjectType(project, path = "") {
+  if (project.project_type) return project;
+  let selected = "";
+  while (!["object_detection", "csv_classification"].includes(selected)) {
+    selected = window.prompt("This project has no project_type. Enter object_detection or csv_classification:", "object_detection") || "";
+  }
+  project.project_type = selected;
+  if (path) {
+    return api("/api/projects/type", {
+      method: "POST",
+      body: JSON.stringify({ path, project_type: selected }),
+    });
+  }
+  state.project = project;
+  await saveBrowserProject();
+  return project;
+}
+
+function setProjectMode() {
+  const isClassification = projectType() === "csv_classification";
+  document.body.classList.toggle("classificationMode", isClassification);
+  document.querySelectorAll(".objectDetectionOnly").forEach((node) => {
+    node.hidden = isClassification;
+  });
+  document.querySelectorAll(".classificationOnly").forEach((node) => {
+    node.hidden = !isClassification;
+  });
+}
+
 function selectedModelPath() {
   return el("projectModelSelect").value;
 }
@@ -182,6 +225,11 @@ function currentAnnotation() {
 }
 
 function loadProject(project, path) {
+  project.images ||= [];
+  project.videos ||= [];
+  project.annotations ||= {};
+  project.classes ||= [];
+  project.classification ||= { datasets: [], runs: [], last_run_id: null };
   state.project = project;
   state.projectPath = path;
   state.projectHandle = null;
@@ -191,17 +239,30 @@ function loadProject(project, path) {
   state.selectedBoxId = null;
   state.completedTrackingJobId = null;
   state.poseJobId = null;
+  state.classificationDatasetId = project.classification.datasets?.at(-1)?.id || null;
+  state.classificationColumns = project.classification.datasets?.at(-1)?.columns || [];
+  setProjectMode();
   renderClasses();
   renderTrackingControls();
   renderModelConfig();
+  renderClassificationProject();
   renderImageList();
   setRightPanel("images");
   loadCurrentImage();
-  setStatus(`${project.name} (${project.images.length} images)`);
-  refreshProjectModels().catch((error) => setStatus(error.message));
+  setStatus(projectType() === "csv_classification" ? `${project.name} (CSV classification)` : `${project.name} (${project.images.length} images)`);
+  if (projectType() === "object_detection") {
+    refreshProjectModels().catch((error) => setStatus(error.message));
+  } else {
+    renderProjectModelOptions([]);
+  }
 }
 
 function loadBrowserProject(project, handle, files = null) {
+  project.images ||= [];
+  project.videos ||= [];
+  project.annotations ||= {};
+  project.classes ||= [];
+  project.classification ||= { datasets: [], runs: [], last_run_id: null };
   state.project = project;
   state.projectPath = "";
   state.projectHandle = handle;
@@ -211,13 +272,17 @@ function loadBrowserProject(project, handle, files = null) {
   state.selectedBoxId = null;
   state.completedTrackingJobId = null;
   state.poseJobId = null;
+  state.classificationDatasetId = project.classification.datasets?.at(-1)?.id || null;
+  state.classificationColumns = project.classification.datasets?.at(-1)?.columns || [];
+  setProjectMode();
   renderClasses();
   renderTrackingControls();
   renderModelConfig();
+  renderClassificationProject();
   renderImageList();
   setRightPanel("images");
   loadCurrentImage();
-  setStatus(`${project.name} (${project.images.length} images, browser folder mode)`);
+  setStatus(projectType() === "csv_classification" ? `${project.name} (CSV classification, browser folder mode)` : `${project.name} (${project.images.length} images, browser folder mode)`);
   renderProjectModelOptions([]);
 }
 
@@ -250,6 +315,7 @@ function focusAnnotator() {
 }
 
 function setRightPanel(panel) {
+  if (projectType() === "csv_classification") return;
   state.rightPanel = panel;
   const showingImages = panel === "images";
   el("showImageQueue").classList.toggle("active", showingImages);
@@ -610,10 +676,11 @@ canvas.addEventListener("pointerup", async () => {
 el("createProject").onclick = async () => {
   const name = el("projectName").value.trim();
   const path = projectPathFromName(name);
-  const classes = el("classes").value.split(",").map((item) => item.trim()).filter(Boolean);
+  const type = el("projectType").value;
+  const classes = type === "object_detection" ? el("classes").value.split(",").map((item) => item.trim()).filter(Boolean) : [];
   const project = await api("/api/projects", {
     method: "POST",
-    body: JSON.stringify({ path, name, classes }),
+    body: JSON.stringify({ path, name, classes, project_type: type }),
   });
   loadProject(project, path);
   refreshProjects().catch((error) => setStatus(error.message));
@@ -625,7 +692,9 @@ el("browseProject").onclick = async () => {
     const handle = await window.showDirectoryPicker({ mode: "readwrite" });
     const projectFile = await handle.getFileHandle("project.json");
     const file = await projectFile.getFile();
-    const project = JSON.parse(await file.text());
+    let project = JSON.parse(await file.text());
+    state.projectHandle = handle;
+    project = await ensureProjectType(project);
     loadBrowserProject(project, handle);
     return;
   }
@@ -641,7 +710,8 @@ el("projectFolderInput").onchange = async () => {
   }
   const projectFile = fileMap.get("project.json");
   if (!projectFile) throw new Error("Selected folder does not contain project.json");
-  const project = JSON.parse(await projectFile.text());
+  let project = JSON.parse(await projectFile.text());
+  project = await ensureProjectType(project);
   loadBrowserProject(project, null, fileMap);
 };
 
@@ -665,7 +735,8 @@ function requireBackendProject(actionName) {
 el("openProject").onclick = async () => {
   const path = el("projectSelect").value;
   if (!path) throw new Error("Select an existing project first");
-  const project = await api("/api/projects/open", { method: "POST", body: JSON.stringify({ path }) });
+  let project = await api("/api/projects/open", { method: "POST", body: JSON.stringify({ path }) });
+  project = await ensureProjectType(project, path);
   loadProject(project, path);
 };
 
@@ -1181,6 +1252,368 @@ async function maybeAutoSuggest(token) {
   if (token !== state.autoSuggestToken || currentImage()?.id !== imageId) return;
   focusAnnotator();
 }
+
+function renderClassificationProject() {
+  const datasets = state.project?.classification?.datasets || [];
+  const latest = datasets.at(-1);
+  if (latest) {
+    state.classificationDatasetId = latest.id;
+    state.classificationColumns = latest.columns || [];
+    renderClassificationColumns(state.classificationColumns, latest.summary);
+    el("classificationInfo").textContent = `${latest.source_name || latest.id}: ${latest.rows} rows, ${(latest.columns || []).length} columns`;
+  } else {
+    state.classificationDatasetId = null;
+    state.classificationColumns = [];
+    el("classificationTarget").innerHTML = "";
+    el("classificationFeatures").innerHTML = "";
+    el("classificationInfo").textContent = "No CSV dataset imported.";
+    el("classificationMetrics").innerHTML = "";
+    clearClassificationClusterPlot();
+  }
+  renderClassificationRuns();
+}
+
+function renderClassificationColumns(columns, summary = null) {
+  const target = el("classificationTarget");
+  target.innerHTML = "";
+  for (const column of columns) {
+    const option = document.createElement("option");
+    option.value = column;
+    option.textContent = column;
+    target.appendChild(option);
+  }
+  if (columns.length) {
+    target.value = columns.at(-1);
+  }
+  renderClassificationFeatures();
+  if (summary) {
+    const columnCount = Object.keys(summary.columns || {}).length;
+    const preview = columns.slice(0, 6).join(", ");
+    const suffix = columns.length > 6 ? ", ..." : "";
+    el("classificationStatus").textContent = `Imported ${columns.length} columns: ${preview}${suffix}. Choose target and features before training.`;
+    el("classificationInfo").textContent = `Dataset ready: ${columnCount} columns`;
+  }
+}
+
+function renderClassificationFeatures() {
+  const container = el("classificationFeatures");
+  const target = el("classificationTarget").value;
+  container.innerHTML = "";
+  for (const column of state.classificationColumns) {
+    if (column === target) continue;
+    const label = document.createElement("label");
+    label.className = "inlineControl featureItem";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = column;
+    checkbox.checked = true;
+    label.append(checkbox, document.createTextNode(column));
+    container.appendChild(label);
+  }
+}
+
+function selectedFeatureColumns() {
+  return [...el("classificationFeatures").querySelectorAll("input[type='checkbox']:checked")].map((item) => item.value);
+}
+
+function renderClassificationRuns() {
+  const select = el("classificationRun");
+  const runs = state.project?.classification?.runs || [];
+  select.innerHTML = "";
+  if (!runs.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No trained runs";
+    option.disabled = true;
+    option.selected = true;
+    select.appendChild(option);
+    return;
+  }
+  for (const run of runs) {
+    const option = document.createElement("option");
+    option.value = run.id;
+    option.textContent = `${run.id.slice(0, 8)} - ${run.target_column}`;
+    select.appendChild(option);
+  }
+  select.value = state.project.classification.last_run_id || runs.at(-1).id;
+}
+
+function renderClassificationMetrics(metrics) {
+  const container = el("classificationMetrics");
+  container.innerHTML = "";
+  if (!metrics || !Object.keys(metrics).length) return;
+  const values = [
+    ["Accuracy", metrics.accuracy],
+    ["Macro F1", metrics.macro_f1],
+    ["Weighted F1", metrics.weighted_f1],
+    ["Train rows", metrics.train_rows],
+    ["Test rows", metrics.test_rows],
+  ];
+  for (const [label, value] of values) {
+    const item = document.createElement("div");
+    item.className = "metricCard";
+    const title = document.createElement("span");
+    title.textContent = label;
+    const number = document.createElement("strong");
+    number.textContent = typeof value === "number" && value <= 1 ? value.toFixed(3) : String(value ?? "-");
+    item.append(title, number);
+    container.appendChild(item);
+  }
+  if (metrics.class_distribution) {
+    const item = document.createElement("pre");
+    item.className = "jsonBlock";
+    item.textContent = `Class distribution\n${JSON.stringify(metrics.class_distribution, null, 2)}`;
+    container.appendChild(item);
+  }
+  if (metrics.confusion_matrix) {
+    const item = document.createElement("pre");
+    item.className = "jsonBlock";
+    item.textContent = `Confusion matrix\nLabels: ${(metrics.labels || []).join(", ")}\n${metrics.confusion_matrix.map((row) => row.join("  ")).join("\n")}`;
+    container.appendChild(item);
+  }
+}
+
+function clearClassificationClusterPlot(message = "Import a CSV and choose target/features to plot clusters.") {
+  const canvasElement = el("classificationClusterCanvas");
+  if (!canvasElement) return;
+  const clusterCtx = canvasElement.getContext("2d");
+  clusterCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+  clusterCtx.fillStyle = "#f7f9fc";
+  clusterCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+  clusterCtx.fillStyle = "#5d6b7c";
+  clusterCtx.font = "16px system-ui, sans-serif";
+  clusterCtx.textAlign = "center";
+  clusterCtx.fillText("No cluster plot", canvasElement.width / 2, canvasElement.height / 2 - 8);
+  clusterCtx.font = "13px system-ui, sans-serif";
+  clusterCtx.fillText(message, canvasElement.width / 2, canvasElement.height / 2 + 18);
+  el("classificationClusterStatus").textContent = message;
+}
+
+function renderClassificationClusterPlot(plot) {
+  state.classificationClusterPlot = plot;
+  const canvasElement = el("classificationClusterCanvas");
+  const clusterCtx = canvasElement.getContext("2d");
+  const width = canvasElement.width;
+  const height = canvasElement.height;
+  const padding = { left: 52, right: 190, top: 28, bottom: 46 };
+  const points = plot.points || [];
+  clusterCtx.clearRect(0, 0, width, height);
+  clusterCtx.fillStyle = "#ffffff";
+  clusterCtx.fillRect(0, 0, width, height);
+  if (!points.length) {
+    clearClassificationClusterPlot("No rows available to plot.");
+    return;
+  }
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const colors = ["#2563eb", "#d88906", "#1f7a42", "#dc3454", "#7c3aed", "#0f766e", "#be123c", "#475569"];
+  const labels = plot.labels || [...new Set(points.map((point) => point.label))].sort();
+  const colorByLabel = new Map(labels.map((label, index) => [label, colors[index % colors.length]]));
+  const toCanvasX = (value) => padding.left + ((value - minX) / rangeX) * plotWidth;
+  const toCanvasY = (value) => padding.top + plotHeight - ((value - minY) / rangeY) * plotHeight;
+
+  clusterCtx.strokeStyle = "#d7dfeb";
+  clusterCtx.lineWidth = 1;
+  clusterCtx.strokeRect(padding.left, padding.top, plotWidth, plotHeight);
+  clusterCtx.fillStyle = "#5d6b7c";
+  clusterCtx.font = "12px system-ui, sans-serif";
+  clusterCtx.textAlign = "center";
+  clusterCtx.fillText("PCA 1", padding.left + plotWidth / 2, height - 12);
+  clusterCtx.save();
+  clusterCtx.translate(16, padding.top + plotHeight / 2);
+  clusterCtx.rotate(-Math.PI / 2);
+  clusterCtx.fillText("PCA 2", 0, 0);
+  clusterCtx.restore();
+
+  for (const point of points) {
+    clusterCtx.beginPath();
+    clusterCtx.arc(toCanvasX(point.x), toCanvasY(point.y), 4, 0, Math.PI * 2);
+    clusterCtx.fillStyle = colorByLabel.get(point.label) || "#2563eb";
+    clusterCtx.globalAlpha = 0.72;
+    clusterCtx.fill();
+  }
+  clusterCtx.globalAlpha = 1;
+
+  clusterCtx.textAlign = "left";
+  clusterCtx.font = "13px system-ui, sans-serif";
+  clusterCtx.fillStyle = "#172033";
+  clusterCtx.fillText("Target classes", width - padding.right + 28, padding.top + 2);
+  labels.forEach((label, index) => {
+    const y = padding.top + 28 + index * 22;
+    clusterCtx.fillStyle = colorByLabel.get(label);
+    clusterCtx.fillRect(width - padding.right + 28, y - 10, 12, 12);
+    clusterCtx.fillStyle = "#172033";
+    clusterCtx.fillText(String(label), width - padding.right + 48, y);
+  });
+  const variance = (plot.explained_variance || []).map((value) => `${(value * 100).toFixed(1)}%`).join(" / ");
+  el("classificationClusterStatus").textContent = `Plotted ${points.length} rows with PCA variance ${variance || "n/a"}.`;
+}
+
+function renderClassificationJob(job) {
+  const lines = [`Status: ${job.status}`];
+  if (job.run_path) lines.push(`Run: ${job.run_path}`);
+  if (job.model_path) lines.push(`Model: ${job.model_path}`);
+  if (job.error) lines.push(`Error: ${job.error}`);
+  el("classificationStatus").textContent = lines.join("\n");
+  renderClassificationMetrics(job.metrics || {});
+}
+
+async function pollClassificationTraining(jobId) {
+  const job = await api(`/api/classification/train/${jobId}`);
+  renderClassificationJob(job);
+  if (job.status === "completed" || job.status === "failed") {
+    clearInterval(state.classificationTrainPoll);
+    state.classificationTrainPoll = null;
+    state.classificationTrainJobId = null;
+    el("startClassificationTraining").disabled = false;
+    if (job.status === "completed") {
+      setStatus("Classification training completed");
+      const project = await api("/api/projects/open", { method: "POST", body: JSON.stringify({ path: state.projectPath }) });
+      loadProject(project, state.projectPath);
+      renderClassificationMetrics(job.metrics || {});
+    } else {
+      setStatus(job.error || "Classification training failed");
+    }
+  }
+}
+
+function renderPredictionRows(rows) {
+  const container = el("classificationPredictions");
+  container.innerHTML = "";
+  if (!rows?.length) {
+    container.textContent = "No prediction rows returned.";
+    return;
+  }
+  const table = document.createElement("table");
+  const columns = Object.keys(rows[0]);
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const column of columns) {
+    const th = document.createElement("th");
+    th.textContent = column;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  const tbody = document.createElement("tbody");
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    for (const column of columns) {
+      const td = document.createElement("td");
+      const value = row[column];
+      td.textContent = value == null ? "" : column.startsWith("prob_") && typeof value === "number" ? `${(value * 100).toFixed(1)}%` : String(value);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.append(thead, tbody);
+  container.appendChild(table);
+}
+
+el("classificationTarget").onchange = renderClassificationFeatures;
+
+el("plotClassificationClusters").onclick = async () => {
+  requireBackendProject("Cluster plot");
+  if (!state.classificationDatasetId) throw new Error("Import a CSV dataset first");
+  const featureColumns = selectedFeatureColumns();
+  if (!featureColumns.length) throw new Error("Select at least one feature column");
+  const button = el("plotClassificationClusters");
+  button.disabled = true;
+  el("classificationClusterStatus").textContent = "Calculating PCA cluster plot...";
+  try {
+    const plot = await api("/api/classification/clusters", {
+      method: "POST",
+      body: JSON.stringify({
+        project_path: state.projectPath,
+        dataset_id: state.classificationDatasetId,
+        target_column: el("classificationTarget").value,
+        feature_columns: featureColumns,
+      }),
+    });
+    renderClassificationClusterPlot(plot);
+    setStatus("Cluster plot ready");
+  } finally {
+    button.disabled = false;
+  }
+};
+
+el("importClassificationCsv").onclick = async () => {
+  requireBackendProject("CSV import");
+  if (projectType() !== "csv_classification") throw new Error("Open a CSV classification project first");
+  const file = el("classificationCsvFile").files[0];
+  if (!file) throw new Error("Choose a CSV file");
+  const form = new FormData();
+  form.append("project_path", state.projectPath);
+  form.append("file", file);
+  el("importClassificationCsv").disabled = true;
+  el("classificationStatus").textContent = "Importing CSV...";
+  try {
+    const result = await api("/api/classification/datasets/import", { method: "POST", body: form });
+    state.classificationDatasetId = result.dataset_id;
+    state.classificationColumns = result.columns || [];
+    renderClassificationColumns(state.classificationColumns, result.summary);
+    const project = await api("/api/projects/open", { method: "POST", body: JSON.stringify({ path: state.projectPath }) });
+    loadProject(project, state.projectPath);
+    setStatus(`Imported CSV with ${result.rows} rows`);
+  } finally {
+    el("importClassificationCsv").disabled = false;
+  }
+};
+
+el("startClassificationTraining").onclick = async () => {
+  requireBackendProject("Classification training");
+  if (!state.classificationDatasetId) throw new Error("Import a CSV dataset first");
+  const featureColumns = selectedFeatureColumns();
+  if (!featureColumns.length) throw new Error("Select at least one feature column");
+  const button = el("startClassificationTraining");
+  button.disabled = true;
+  setStatus("Starting classification training...");
+  const job = await api("/api/classification/train/start", {
+    method: "POST",
+    body: JSON.stringify({
+      project_path: state.projectPath,
+      dataset_id: state.classificationDatasetId,
+      target_column: el("classificationTarget").value,
+      feature_columns: featureColumns,
+      test_size: Number(el("classificationTestSize").value),
+    }),
+  });
+  state.classificationTrainJobId = job.id;
+  renderClassificationJob(job);
+  clearInterval(state.classificationTrainPoll);
+  state.classificationTrainPoll = setInterval(() => pollClassificationTraining(job.id).catch((error) => setStatus(error.message)), 1500);
+  setStatus(`Classification job started: ${job.id}`);
+};
+
+el("predictClassificationCsv").onclick = async () => {
+  requireBackendProject("Classification prediction");
+  const file = el("classificationPredictFile").files[0];
+  if (!file) throw new Error("Choose a CSV file to predict");
+  const form = new FormData();
+  form.append("project_path", state.projectPath);
+  form.append("file", file);
+  if (el("classificationRun").value) form.append("run_id", el("classificationRun").value);
+  el("predictClassificationCsv").disabled = true;
+  el("classificationPredictionStatus").textContent = "Predicting...";
+  try {
+    const result = await api("/api/classification/predict", { method: "POST", body: form });
+    renderPredictionRows(result.rows || []);
+    const link = el("classificationDownload");
+    link.href = `${result.download_url}?project_path=${encodeURIComponent(state.projectPath)}`;
+    link.hidden = false;
+    el("classificationPredictionStatus").textContent = `Generated predictions from run ${result.run_id}.`;
+    setStatus("Classification predictions ready");
+  } finally {
+    el("predictClassificationCsv").disabled = false;
+  }
+};
 
 el("exportDataset").onclick = async () => {
   requireBackendProject("Export");

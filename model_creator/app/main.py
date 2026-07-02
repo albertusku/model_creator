@@ -10,15 +10,26 @@ from fastapi.staticfiles import StaticFiles
 from ..models.object_detection.auto_review import get_auto_review_job, start_auto_review_job
 from ..datasets.exporters import export_dataset
 from ..core.file_dialog import choose_directory
+from ..models.classification.training import (
+    classification_cluster_plot,
+    get_classification_job,
+    get_prediction_path,
+    import_classification_dataset,
+    predict_classification_csv,
+    start_classification_training_job,
+)
 from ..models.object_detection.inference import predict_boxes
 from ..core.schemas import (
     AutoReviewStartRequest,
+    ClassificationClusterRequest,
+    ClassificationTrainRequest,
     ConfigureModelRequest,
     CreateProjectRequest,
     ExportRequest,
     PoseStartRequest,
     ProjectPathRequest,
     SaveAnnotationsRequest,
+    SetProjectTypeRequest,
     SplitConfig,
     SuggestBoxesRequest,
     TrackingCandidatesRequest,
@@ -38,6 +49,7 @@ from ..core.storage import (
     projects_base,
     project_root,
     save_annotations,
+    set_project_type,
 )
 from ..media.video import extract_frames
 from ..models.object_detection.tracking import generate_candidate_frames, get_tracking_job, get_tracking_video_path, start_tracking_job
@@ -56,7 +68,7 @@ def health() -> dict[str, str]:
 @app.post("/api/projects")
 def api_create_project(payload: CreateProjectRequest) -> dict:
     try:
-        return create_project(payload.path, payload.name, payload.classes, payload.split)
+        return create_project(payload.path, payload.name, payload.classes, payload.split, payload.project_type)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -67,6 +79,14 @@ def api_open_project(payload: ProjectPathRequest) -> dict:
         return load_project(payload.path)
     except Exception as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/projects/type")
+def api_set_project_type(payload: SetProjectTypeRequest) -> dict:
+    try:
+        return set_project_type(payload.path, payload.project_type)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/projects/discover")
@@ -304,6 +324,77 @@ def api_training_asset(job_id: str, name: str) -> FileResponse:
     if not path:
         raise HTTPException(status_code=404, detail="training asset not found")
     return FileResponse(path)
+
+
+@app.post("/api/classification/datasets/import")
+async def api_import_classification_dataset(
+    project_path: str = Form(...),
+    file: UploadFile = File(...),
+) -> dict:
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False) as handle:
+            temp_path = Path(handle.name)
+            while chunk := await file.read(1024 * 1024):
+                handle.write(chunk)
+        return import_classification_dataset(project_path, file.filename or "dataset.csv", temp_path)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if temp_path:
+            temp_path.unlink(missing_ok=True)
+
+
+@app.post("/api/classification/train/start")
+def api_start_classification_training(payload: ClassificationTrainRequest) -> dict:
+    try:
+        return start_classification_training_job(payload)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/classification/train/{job_id}")
+def api_classification_training_status(job_id: str) -> dict:
+    job = get_classification_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="classification training job not found")
+    return job
+
+
+@app.post("/api/classification/clusters")
+def api_classification_clusters(payload: ClassificationClusterRequest) -> dict:
+    try:
+        return classification_cluster_plot(payload)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/classification/predict")
+async def api_predict_classification(
+    project_path: str = Form(...),
+    file: UploadFile = File(...),
+    run_id: str | None = Form(None),
+) -> dict:
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False) as handle:
+            temp_path = Path(handle.name)
+            while chunk := await file.read(1024 * 1024):
+                handle.write(chunk)
+        return predict_classification_csv(project_path, temp_path, run_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if temp_path:
+            temp_path.unlink(missing_ok=True)
+
+
+@app.get("/api/classification/predictions/{prediction_id}/download")
+def api_classification_prediction_download(prediction_id: str, project_path: str) -> FileResponse:
+    path = get_prediction_path(project_path, prediction_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="classification prediction not found")
+    return FileResponse(path, media_type="text/csv", filename=f"predictions_{prediction_id}.csv")
 
 
 app.mount("/", StaticFiles(directory=BASE_DIR / "static", html=True), name="static")

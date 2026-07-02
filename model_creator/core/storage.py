@@ -33,11 +33,19 @@ def projects_base(path: str | Path | None = None) -> Path:
 
 
 def ensure_dirs(root: Path) -> None:
-    for name in ("images", "videos", "exports"):
+    for name in ("images", "videos", "exports", "classification/datasets", "classification_predictions", "classification_runs"):
         (root / name).mkdir(parents=True, exist_ok=True)
 
 
-def default_project(name: str, classes: list[str], split: SplitConfig) -> dict[str, Any]:
+def default_project(
+    name: str,
+    classes: list[str],
+    split: SplitConfig,
+    project_type: str = "object_detection",
+) -> dict[str, Any]:
+    if project_type not in {"object_detection", "csv_classification"}:
+        raise ValueError("unknown project type")
+
     cleaned = []
     seen = set()
     for class_name in classes:
@@ -45,12 +53,13 @@ def default_project(name: str, classes: list[str], split: SplitConfig) -> dict[s
         if value and value not in seen:
             seen.add(value)
             cleaned.append(value)
-    if not cleaned:
+    if project_type == "object_detection" and not cleaned:
         raise ValueError("at least one class is required")
 
     return {
         "version": 1,
         "name": name.strip() or "Untitled Dataset",
+        "project_type": project_type,
         "created_at": now_iso(),
         "updated_at": now_iso(),
         "classes": [ClassDef(id=i, name=value).dict() for i, value in enumerate(cleaned)],
@@ -59,6 +68,7 @@ def default_project(name: str, classes: list[str], split: SplitConfig) -> dict[s
         "images": [],
         "annotations": {},
         "model": None,
+        "classification": {"datasets": [], "runs": [], "last_run_id": None},
     }
 
 
@@ -72,11 +82,17 @@ def atomic_write_json(path: Path, data: dict[str, Any]) -> None:
     Path(temp_name).replace(path)
 
 
-def create_project(path: str, name: str, classes: list[str], split: SplitConfig) -> dict[str, Any]:
+def create_project(
+    path: str,
+    name: str,
+    classes: list[str],
+    split: SplitConfig,
+    project_type: str = "object_detection",
+) -> dict[str, Any]:
     root = project_root(path)
     root.mkdir(parents=True, exist_ok=True)
     ensure_dirs(root)
-    data = default_project(name, classes, split)
+    data = default_project(name, classes, split, project_type)
     atomic_write_json(project_file(root), data)
     return data
 
@@ -87,6 +103,16 @@ def load_project(path: str | Path) -> dict[str, Any]:
         raise FileNotFoundError(f"Project file not found: {file_path}")
     with file_path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def set_project_type(path: str | Path, project_type: str) -> dict[str, Any]:
+    if project_type not in {"object_detection", "csv_classification"}:
+        raise ValueError("unknown project type")
+    data = load_project(path)
+    data["project_type"] = project_type
+    data.setdefault("classification", {"datasets": [], "runs": [], "last_run_id": None})
+    save_project(path, data)
+    return data
 
 
 def discover_projects(base_path: str | Path | None = None) -> list[dict[str, str]]:
